@@ -91,9 +91,9 @@ namespace pt {
 
 	extern "C" int main()
 	{
-		std::string inputfile("../../../models/CornellBox1/CornellBox-Original.obj");
+		std::string inputfile("../../models/CornellBox1/CornellBox-Original.obj");
 		Model* scene = loadOBJ(inputfile);
-        Model* bunny = loadOBJ("../../../models/bunny/bunny.obj");
+        Model* bunny = loadOBJ("../../models/bunny/bunny.obj");
         //scene->Add(bunny);
 		Camera camera{
 			vec3f(0.f, 1.f, 3.f), // pos
