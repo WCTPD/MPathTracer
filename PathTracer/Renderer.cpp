@@ -23,12 +23,12 @@ namespace pt {
 		TriangleMeshSBTData data;
 	};
 
-	void pt::Renderer::update_subframe_index()
+	void Renderer::update_subframe_index()
 	{
 		++launchParams.subframe_index;
 	}
 
-	pt::Renderer::Renderer(const Model* model)
+	Renderer::Renderer(const Model* model)
 		: model(model)
 	{	
 		initOptix();
@@ -48,7 +48,7 @@ namespace pt {
 		launchParams.subframe_index = 0;
 	}
 
-	void pt::Renderer::render()
+	void Renderer::render()
 	{
 		if (launchParams.frame.size.x == 0)
 			return;
@@ -119,7 +119,7 @@ namespace pt {
 		CUDA_SYNC_CHECK();
 	}
 
-	void pt::Renderer::resize(const vec2i& newSize)
+	void Renderer::resize(const vec2i& newSize)
 	{
 		if (denoiser) {
 			OPTIX_CHECK(optixDenoiserDestroy(denoiser));
@@ -158,12 +158,12 @@ namespace pt {
 		);
 	}
 
-	void pt::Renderer::downloadPixels(vec4f h_pixels[])
+	void Renderer::downloadPixels(vec4f h_pixels[])
 	{
 		denoisedBuffer.download(h_pixels, launchParams.frame.size.x * launchParams.frame.size.y);
 	}
 
-	void pt::Renderer::setCamera(const Camera& camera)
+	void Renderer::setCamera(const Camera& camera)
 	{
 		lastSetCamera = camera;
 		launchParams.camera.dir = normalize(camera.at - camera.pos);

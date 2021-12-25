@@ -1,3 +1,5 @@
 .vscode/
 build/
 models/
+out/
+.vs/
