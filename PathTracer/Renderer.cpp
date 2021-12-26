@@ -23,6 +23,11 @@ namespace pt {
 		TriangleMeshSBTData data;
 	};
 
+	struct __align__(OPTIX_SBT_RECORD_ALIGNMENT) CallableGroupRecord
+	{
+		__align__(OPTIX_SBT_RECORD_ALIGNMENT) char header[OPTIX_SBT_RECORD_HEADER_SIZE];
+	};
+
 	void Renderer::update_subframe_index()
 	{
 		++launchParams.subframe_index;
@@ -37,6 +42,7 @@ namespace pt {
 		createRaygenPrograms();
 		createMissPrograms();
 		createHitgroupPrograms();
+		createCallablegroupPrograms();
 		launchParams.traversable = buildAccel();
 		createPipeline();
 		buildSBT();
@@ -44,7 +50,6 @@ namespace pt {
 		launchParamsBuffer.alloc(sizeof(launchParams));
 		launchParams.spp = 10;
 		launchParams.light_samples = 1;
-		launchParams.P_RR = 0.8f;
 		launchParams.subframe_index = 0;
 	}
 
@@ -175,11 +180,11 @@ namespace pt {
 
 	void Renderer::setLight()
 	{
-		launchParams.light.corner = vec3f(-0.24f, 1.98f, -0.22f);
-		launchParams.light.emission = vec3f(47.0f, 38.0f, 31.0f);
-		launchParams.light.v1 = vec3f(0.f, 0.f, 0.38);
-		launchParams.light.v2 = vec3f(0.47f, 0.f, 0.f);
-		launchParams.light.normal = -normalize(cross(launchParams.light.v1, launchParams.light.v2));
+		launchParams.light.corner = vec3f(213.f, 548.7f, 227.f);
+		launchParams.light.emission = vec3f(15.f, 15.f, 15.f);
+		launchParams.light.v1 = vec3f(130.f, 0.f, 0.f);
+		launchParams.light.v2 = vec3f(0.f, 0.f, 105.f);
+		launchParams.light.normal = normalize(cross(launchParams.light.v1, launchParams.light.v2));
 	}
 
 	void Renderer::initOptix()
@@ -364,6 +369,37 @@ namespace pt {
 		}
 	}
 
+	void Renderer::createCallablegroupPrograms()
+	{
+		callablePGs.resize(CALLABLE_PGS);
+		std::vector<OptixProgramGroupDesc> pgDesc(CALLABLE_PGS);
+		OptixProgramGroupOptions pgOptions = {};
+
+		pgDesc[LAMBERTIAN_SAMPLE].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
+		pgDesc[LAMBERTIAN_SAMPLE].callables.moduleDC = module;
+		pgDesc[LAMBERTIAN_SAMPLE].callables.entryFunctionNameDC = "__direct_callable__lambertian_sample";
+
+		pgDesc[LAMBERTIAN_PDF].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
+		pgDesc[LAMBERTIAN_PDF].callables.moduleDC = module;
+		pgDesc[LAMBERTIAN_PDF].callables.entryFunctionNameDC = "__direct_callable__lambertian_pdf";
+
+		pgDesc[LAMBERTIAN_EVAL].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
+		pgDesc[LAMBERTIAN_EVAL].callables.moduleDC = module;
+		pgDesc[LAMBERTIAN_EVAL].callables.entryFunctionNameDC = "__direct_callable__lambertian_eval";
+
+		char log[2048];
+		size_t sizeof_log = sizeof(log);
+		OPTIX_CHECK(optixProgramGroupCreate(
+			optixContext,
+			pgDesc.data(),
+			CALLABLE_PGS,
+			&pgOptions,
+			log,
+			&sizeof_log,
+			callablePGs.data()
+		));
+	}
+
 	void Renderer::createPipeline()
 	{
 		std::vector<OptixProgramGroup> programGroups;
@@ -374,6 +410,9 @@ namespace pt {
 			programGroups.push_back(pg);
 		}
 		for (auto pg : hitgroupPGs) {
+			programGroups.push_back(pg);
+		}
+		for (auto pg : callablePGs) {
 			programGroups.push_back(pg);
 		}
 
@@ -430,23 +469,59 @@ namespace pt {
 		std::vector<HitGroupRecord> hitGroupRecords;
 		for (int meshID = 0; meshID < numObjects; meshID++) {
 			HitGroupRecord rec;
-			{
-				OPTIX_CHECK(optixSbtRecordPackHeader(hitgroupPGs[0], &rec));
-				rec.data.color = model->meshes[meshID]->diffuse;
-				rec.data.emission = model->meshes[meshID]->emission;
-				rec.data.vertex = (vec3f*)vertexBuffer[meshID].d_pointer();
-				rec.data.index = (vec3i*)indexBuffer[meshID].d_pointer();
-				hitGroupRecords.push_back(rec);
+			// {
+			// 	OPTIX_CHECK(optixSbtRecordPackHeader(hitgroupPGs[0], &rec));
+			// 	// rec.data.color = model->meshes[meshID]->diffuse;
+			// 	rec.data.emission = model->meshes[meshID]->emission;
+			// 	rec.data.vertex = (vec3f*)vertexBuffer[meshID].d_pointer();
+			// 	rec.data.index = (vec3i*)indexBuffer[meshID].d_pointer();
+			// 	hitGroupRecords.push_back(rec);
+			// }
+			// {
+			// 	OPTIX_CHECK(optixSbtRecordPackHeader(hitgroupPGs[1], &rec));
+			// 	hitGroupRecords.push_back(rec);
+			// }
+			auto mesh = model->meshes[meshID];
+			rec.data.vertex = (vec3f*)vertexBuffer[meshID].d_pointer();
+			rec.data.index = (vec3i*)indexBuffer[meshID].d_pointer();
+			switch (mesh->material->type) {
+			case m_type::LAMBERTIAN:
+				rec.data.albedo = std::dynamic_pointer_cast<Lambertian>(mesh->material)->albedo;
+				rec.data.emission = vec3f(0.f);
+				rec.data.eval_id = LAMBERTIAN_EVAL;
+				rec.data.sample_id = LAMBERTIAN_SAMPLE;
+				rec.data.pdf_id = LAMBERTIAN_PDF;
+				break;
+			case m_type::LIGHT:
+				rec.data.eval_id = LAMBERTIAN_EVAL;
+				rec.data.sample_id = LAMBERTIAN_SAMPLE;
+				rec.data.pdf_id = LAMBERTIAN_PDF;
+				rec.data.emission = std::dynamic_pointer_cast<Diffuse_light>(mesh->material)->emit;
+				break;
+			default:
+				assert(0);
 			}
-			{
-				OPTIX_CHECK(optixSbtRecordPackHeader(hitgroupPGs[1], &rec));
-				hitGroupRecords.push_back(rec);
-			}
+			OPTIX_CHECK(optixSbtRecordPackHeader(hitgroupPGs[0], &rec));
+			hitGroupRecords.push_back(rec);
+			OPTIX_CHECK(optixSbtRecordPackHeader(hitgroupPGs[1], &rec));
+			hitGroupRecords.push_back(rec);
 		}
 		hitgroupRecordsBuffer.alloc_and_upload(hitGroupRecords);
 		sbt.hitgroupRecordBase = hitgroupRecordsBuffer.d_pointer();
 		sbt.hitgroupRecordStrideInBytes = sizeof(HitGroupRecord);
 		sbt.hitgroupRecordCount = (int)hitGroupRecords.size();
+
+		// callable records
+		std::vector<CallableGroupRecord> callableRecords;
+		for (int i = 0; i < callablePGs.size(); i++) {
+			CallableGroupRecord rec;
+			OPTIX_CHECK(optixSbtRecordPackHeader(callablePGs[i], &rec));
+			callableRecords.push_back(rec);
+		}
+		callableRecordsBuffer.alloc_and_upload(callableRecords);
+		sbt.callablesRecordBase = callableRecordsBuffer.d_pointer();
+		sbt.callablesRecordStrideInBytes = sizeof(CallableGroupRecord);
+		sbt.callablesRecordCount = (int)callableRecords.size();
 	}
 
 	OptixTraversableHandle Renderer::buildAccel()
@@ -464,7 +539,7 @@ namespace pt {
 
 		for (int meshID = 0; meshID < model->meshes.size(); meshID++) {
 			// upload the model to the device: the builder
-			TriangleMesh& mesh = *model->meshes[meshID];
+			Triangle& mesh = *model->meshes[meshID];
 			vertexBuffer[meshID].alloc_and_upload(mesh.vertex);
 			indexBuffer[meshID].alloc_and_upload(mesh.index);
 

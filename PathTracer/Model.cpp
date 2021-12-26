@@ -22,7 +22,7 @@ namespace std {
 
 namespace pt {
 
-    int addVertex(TriangleMesh* mesh,
+    int addVertex(Triangle* mesh,
         const tinyobj::attrib_t& attributes,
         const tinyobj::index_t& idx,
         std::map<tinyobj::index_t, int>& knownVertices)
@@ -57,7 +57,7 @@ namespace pt {
         return newID;
     }
 
-    Model* loadOBJ(const std::string& objFile)
+    Model* loadOBJ(const std::string& objFile, shared_ptr<Material> mat)
     {
         Model* model = new Model;
 
@@ -95,7 +95,7 @@ namespace pt {
             std::map<tinyobj::index_t, int> knownVertices;
 
             for (int materialID : materialIDs) {
-                TriangleMesh* mesh = new TriangleMesh;
+                Triangle* mesh = new Triangle;
 
                 for (int faceID = 0; faceID < (int)shape.mesh.material_ids.size(); faceID++) {
                     if (shape.mesh.material_ids[faceID] != materialID) continue;
@@ -107,8 +107,9 @@ namespace pt {
                         addVertex(mesh, attrib, idx1, knownVertices),
                         addVertex(mesh, attrib, idx2, knownVertices));
                     mesh->index.push_back(idx);
-                    mesh->diffuse = (const vec3f&)materials[materialID].diffuse;
-                    mesh->emission = (const vec3f&)materials[materialID].emission;
+                    // mesh->diffuse = (const vec3f&)materials[materialID].diffuse;
+                    // mesh->emission = (const vec3f&)materials[materialID].emission;
+                    mesh->material = mat;
                 }
 
                 if (mesh->vertex.empty())

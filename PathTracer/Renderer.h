@@ -64,6 +64,8 @@ namespace pt {
         CUDABuffer missRecordsBuffer;
         std::vector<OptixProgramGroup> hitgroupPGs;
         CUDABuffer hitgroupRecordsBuffer;
+        std::vector<OptixProgramGroup> callablePGs;
+        CUDABuffer callableRecordsBuffer;
         OptixShaderBindingTable sbt = {};
 
         /*! @{ our launch parameters, on the host, and the buffer to store
@@ -116,6 +118,8 @@ namespace pt {
 
         /*! does all setup for the hitgroup program(s) we are going to use */
         void createHitgroupPrograms();
+
+        void createCallablegroupPrograms();
 
         /*! assembles the full pipeline of all programs */
         void createPipeline();

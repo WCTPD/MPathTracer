@@ -8,7 +8,16 @@ add_executable (PathTracer
 			    ${embedded_ptx_code}
 				"PathTracer.cpp" 
 				"PathTracer.h"
-				"LaunchParams.h" "tiny_obj_loader.h" "Renderer.h" "Renderer.cpp" "CUDABuffer.h" "optix7.h"  "Model.h" "Model.cpp")
+				"LaunchParams.h"
+        "tiny_obj_loader.h" 
+        "Renderer.h" 
+        "Renderer.cpp" 
+        "CUDABuffer.h" 
+        "optix7.h"  
+        "Model.h" 
+        "Model.cpp"
+        "Material.h"
+        )
 
 
 target_link_libraries(PathTracer 

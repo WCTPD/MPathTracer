@@ -9,6 +9,13 @@ namespace pt {
 
 	using namespace gdt;
 
+	enum {
+		LAMBERTIAN_SAMPLE,
+		LAMBERTIAN_PDF,
+		LAMBERTIAN_EVAL,
+		CALLABLE_PGS,
+	}; // callable id
+
 	struct Light {
 		vec3f emission;
 		vec3f corner;
@@ -43,10 +50,12 @@ namespace pt {
 	};
 
 	struct TriangleMeshSBTData {
-		vec3f color;
+		vec3f albedo;
 		vec3f* vertex;
 		vec3i* index;
 		vec3f emission;
+		double roughness;
+		int pdf_id, sample_id, eval_id;
 	};
 
 	struct MissData {

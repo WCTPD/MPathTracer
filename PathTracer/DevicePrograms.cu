@@ -69,6 +69,7 @@ namespace pt {
         
         radiancePRD* prd = getPRD<radiancePRD>();
         curandState_t* state = prd->state;
+
         if (prd->countEmitted) {
             prd->emitted = sbtData.emission;
         }
@@ -76,12 +77,18 @@ namespace pt {
             prd->emitted = vec3f(0.f);
         }
 		prd->countEmitted = false;
-        prd->origin = P;
+        // vec3f wo = optixDirectCall<vec3f, const radiancePRD*, const vec3f&, const TriangleMeshSBTData&>(
+        //     sbtData.sample_id,
+        //     prd,
+        //     N,
+        //     sbtData
+        // );
         vec3f wo = sampleHemiSphere(-ray_dir, N, state);
+        prd->origin = P;
         prd->direction = normalize(wo);
-        prd->attenuation *= sbtData.color;
+        // prd->attenuation *= sbtData.albedo;
 
-        vec3f result(0.f);
+        // sample light
 		float e1        = getRandomFloat(state), e2 = getRandomFloat(state);
 		const Light light     = optixLaunchParams.light;
 		const vec3f light_pos = light.corner + light.v1 * e1 + light.v2 * e2;
@@ -90,7 +97,24 @@ namespace pt {
 		float L_distance      = length(light_pos - P);
 		float LDotN           = dot(L_dir, N);
 		float LnDotL          = -dot(light.normal, L_dir);
+        vec3f L_light = vec3f(0.f);
 
+        auto pdf = optixDirectCall<float, const radiancePRD*, const vec3f&, const vec3f&, const TriangleMeshSBTData&>(
+                sbtData.pdf_id,
+                prd,
+                wo,
+                N,
+                sbtData
+            );
+        auto eval = optixDirectCall<vec3f, const radiancePRD*, const vec3f&, const vec3f&, const TriangleMeshSBTData&>(
+                sbtData.eval_id,
+                prd,
+                wo,
+                N,
+                sbtData
+            );
+
+        prd->attenuation *= sbtData.albedo;
 		if (LDotN > 0 && LnDotL > 0) {
 			const bool occluded = traceOcclusion(
 				optixLaunchParams.traversable,
@@ -104,11 +128,12 @@ namespace pt {
 				float A = length(cross(light.v1, light.v2));
 				// float pdf_light = 1.f / A;
 				//vec3f fr = 1.f / M_PI;
-				vec3f L_light = (Li * A * LDotN * LnDotL) / (L_distance * L_distance * M_PI);
-				result += L_light;
+				// vec3f L_light = (Li * A * LDotN * LnDotL) / (L_distance * L_distance * M_PI);
+                
+				L_light = (A * LDotN * LnDotL) / (L_distance * L_distance * M_PI);
 			}
 		}
-        prd->radiance += result;
+        prd->radiance += Li * L_light * eval / pdf;
 
     }
 
@@ -184,7 +209,7 @@ namespace pt {
                 result += prd.radiance * (prd.attenuation);
                 /*if (prd.done || getRandomFloat(prd.state) > optixLaunchParams.P_RR)
                     break;*/
-                if (prd.done || Depth > 3)
+                if (prd.done || Depth > 6)
                     break;
                 rayDir = prd.direction;
                 origin = prd.origin;
@@ -207,6 +232,36 @@ namespace pt {
         //optixLaunchParams.frame.accum_color[fbIndex] = accum_color;
         optixLaunchParams.frame.colorBuffer[fbIndex] = (float4)rgba;
 
+    }
+
+    extern "C" __device__ vec3f __direct_callable__lambertian_sample(
+        const radiancePRD* prd,
+        const vec3f& surface_noraml,
+        const TriangleMeshSBTData& sbt
+    )
+    {
+        auto scattered = sampleHemiSphere(prd->direction, surface_noraml, prd->state);
+        return toWorld(surface_noraml, scattered);
+    }
+
+    extern "C" __device__ float __direct_callable__lambertian_pdf(
+        const radiancePRD* prd,
+        const vec3f& scattered,
+        const vec3f& surface_noraml,
+        const TriangleMeshSBTData& sbt
+    )
+    {
+        return 0.5f / M_PI;
+    }
+
+    extern "C" __device__ vec3f __direct_callable__lambertian_eval(
+        const radiancePRD* prd,
+        const vec3f& scattered,
+        const vec3f& surface_noraml,
+        const TriangleMeshSBTData& sbt
+    )
+    {
+        return sbt.albedo / M_PI;
     }
 
 }

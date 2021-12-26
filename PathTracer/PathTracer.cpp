@@ -91,16 +91,23 @@ namespace pt {
 
 	extern "C" int main()
 	{
-		std::string inputfile("../../models/CornellBox1/CornellBox-Original.obj");
-		Model* scene = loadOBJ(inputfile);
-        Model* bunny = loadOBJ("../../models/bunny/bunny.obj");
-        //scene->Add(bunny);
+        auto white = std::make_shared<Lambertian>(vec3f(.73f, .73f, .73f));
+        auto red   = std::make_shared<Lambertian>(vec3f(.65f, .05f, .05f));
+        auto green = std::make_shared<Lambertian>(vec3f(.12f, .45f, .15f));
+        auto light = std::make_shared<Diffuse_light>(vec3f(15.f, 15.f, 15.f));
+        Model scene;
+        scene.Add(loadOBJ("../../models/cornellbox/floor.obj", white));
+        scene.Add(loadOBJ("../../models/cornellbox/left.obj", red));
+        scene.Add(loadOBJ("../../models/cornellbox/right.obj", green));
+        scene.Add(loadOBJ("../../models/cornellbox/shortbox.obj", white));
+        scene.Add(loadOBJ("../../models/cornellbox/tallbox.obj", white));
+        scene.Add(loadOBJ("../../models/cornellbox/light.obj", light));
 		Camera camera{
-			vec3f(0.f, 1.f, 3.f), // pos
-			vec3f(0.f, 1.f, -1.f), // at
+			vec3f(278, 278, -600), // pos
+			vec3f(278, 278, 0), // at
 			vec3f(0.f, 1.f, 0.f) // up
 		}; // from (0,0,0) looking at (0,0,-1)
-		Renderer render(scene);
+		Renderer render(&scene);
 		render.setCamera(camera);
         vec2i fbSize(1200, 1024);
         render.resize(fbSize);
@@ -108,7 +115,7 @@ namespace pt {
         std::vector<uint32_t> pixels(fbSize.x, fbSize.y);
 
         SampleWindow* window = new SampleWindow("Optix 7",
-            scene, camera, 1.f);
+            &scene, camera, 1.f);
 
         window->run();
         return 0;
