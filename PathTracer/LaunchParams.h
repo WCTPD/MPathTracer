@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gdt/math/vec.h"
+#include <sal.h>
 #include <thrust/device_vector.h>
 #include <device_launch_parameters.h>
 #include <curand_kernel.h>
@@ -13,6 +14,12 @@ namespace pt {
 		LAMBERTIAN_SAMPLE,
 		LAMBERTIAN_PDF,
 		LAMBERTIAN_EVAL,
+		MICROFACET_SAMPLE,
+		MICROFACET_PDF,
+		MICROFACET_EVAL,
+        METAL_SAMPLE,
+        METAL_PDF,
+        METAL_EVAL,
 		CALLABLE_PGS,
 	}; // callable id
 
@@ -54,7 +61,8 @@ namespace pt {
 		vec3f* vertex;
 		vec3i* index;
 		vec3f emission;
-		double roughness;
+		vec3f kd;
+		float roughness;
 		int pdf_id, sample_id, eval_id;
 	};
 
@@ -178,4 +186,62 @@ namespace pt {
         vec3f wo(x, y, sqrt(fmaxf(0.f, 1.f - x * x - y * y)));
         return toWorld(N, wo);
     }
+
+    __forceinline__ __device__ float DistributionGGX(const vec3f& N, const vec3f& H, float a)
+    {
+        float a2 = a * a;
+        float NdotH = dot(N, H);
+        float NdotH2 = NdotH * NdotH;
+
+        float denom = NdotH2 * (a2 - 1.0f) + 1.0f;
+        denom = denom * denom * M_PI;
+        return a2 / denom;
+    }
+
+    __forceinline__ __device__ float GeometrySchlickGGX(const float NdotV, const float k)
+    {
+        float nom = NdotV;
+        float denom = NdotV * (1.0 - k) + k;
+        return nom / denom;
+    }
+
+    __forceinline__ __device__ float GeometrySmith(const vec3f&N, const vec3f& V, const vec3f &L, float k)
+    {
+        float NdotV = max(dot(N, V), 0.0f);
+        float NdotL = max(dot(N, L), 0.0f);
+        float ggx1 = GeometrySchlickGGX(NdotL, k);
+        float ggx2 = GeometrySchlickGGX(NdotV, k);
+        return ggx1 * ggx2;
+    }
+
+	__forceinline__ __device__ vec3f reflect(const vec3f &I, const vec3f &N)
+	{
+        return (I - 2 * dot(I, N) * N);
+	}
+
+	__forceinline__ __device__ void fresnel(const vec3f &I, const vec3f &N, const float &ior, float &kr)
+	{
+		float cosi = clamp(-1, 1, dot(I, N));
+        float etai = 1, etat = ior;
+        if (cosi > 0) {
+			float t = etai;
+			etai = etat;
+			etat = t;
+		}//{  swap(etai, etat); }
+        // Compute sini using Snell's law
+        float sint = etai / etat * sqrt(max(0.f, 1 - cosi * cosi));
+        // Total internal reflection
+        if (sint >= 1) {
+            kr = 1;
+        }
+        else {
+            float cost = sqrt(max(0.f, 1 - sint * sint));
+            cosi = abs(cosi);
+            float Rs = ((etat * cosi) - (etai * cost)) / ((etat * cosi) + (etai * cost));
+            float Rp = ((etai * cosi) - (etat * cost)) / ((etai * cosi) + (etat * cost));
+            kr = (Rs * Rs + Rp * Rp) / 2;
+        }
+        // As a consequence of the conservation of energy, transmittance is given by:
+        // kt = 1 - kr;
+	}
 } 

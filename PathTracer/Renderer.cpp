@@ -1,4 +1,5 @@
 #include "Renderer.h"
+#include <memory>
 #include <optix_function_table_definition.h>
 
 namespace pt {
@@ -387,6 +388,30 @@ namespace pt {
 		pgDesc[LAMBERTIAN_EVAL].callables.moduleDC = module;
 		pgDesc[LAMBERTIAN_EVAL].callables.entryFunctionNameDC = "__direct_callable__lambertian_eval";
 
+		pgDesc[MICROFACET_SAMPLE].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
+		pgDesc[MICROFACET_SAMPLE].callables.moduleDC = module;
+		pgDesc[MICROFACET_SAMPLE].callables.entryFunctionNameDC = "__direct_callable__microfacet_sample";
+
+		pgDesc[MICROFACET_PDF].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
+		pgDesc[MICROFACET_PDF].callables.moduleDC = module;
+		pgDesc[MICROFACET_PDF].callables.entryFunctionNameDC = "__direct_callable__microfacet_pdf";
+
+		pgDesc[MICROFACET_EVAL].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
+		pgDesc[MICROFACET_EVAL].callables.moduleDC = module;
+		pgDesc[MICROFACET_EVAL].callables.entryFunctionNameDC = "__direct_callable__microfacet_eval";
+
+		pgDesc[METAL_SAMPLE].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
+		pgDesc[METAL_SAMPLE].callables.moduleDC = module;
+		pgDesc[METAL_SAMPLE].callables.entryFunctionNameDC = "__direct_callable__metal_sample";
+
+		pgDesc[METAL_PDF].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
+		pgDesc[METAL_PDF].callables.moduleDC = module;
+		pgDesc[METAL_PDF].callables.entryFunctionNameDC = "__direct_callable__metal_pdf";
+
+		pgDesc[METAL_EVAL].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
+		pgDesc[METAL_EVAL].callables.moduleDC = module;
+		pgDesc[METAL_EVAL].callables.entryFunctionNameDC = "__direct_callable__metal_eval";
+
 		char log[2048];
 		size_t sizeof_log = sizeof(log);
 		OPTIX_CHECK(optixProgramGroupCreate(
@@ -491,12 +516,31 @@ namespace pt {
 				rec.data.eval_id = LAMBERTIAN_EVAL;
 				rec.data.sample_id = LAMBERTIAN_SAMPLE;
 				rec.data.pdf_id = LAMBERTIAN_PDF;
+				rec.data.kd = vec3f(1.f);
 				break;
 			case m_type::LIGHT:
 				rec.data.eval_id = LAMBERTIAN_EVAL;
 				rec.data.sample_id = LAMBERTIAN_SAMPLE;
 				rec.data.pdf_id = LAMBERTIAN_PDF;
 				rec.data.emission = std::dynamic_pointer_cast<Diffuse_light>(mesh->material)->emit;
+				rec.data.kd = vec3f(1.f);
+				break;
+			case m_type::MICROFACET:
+				{
+					auto p = std::dynamic_pointer_cast<Microfacet>(mesh->material);
+					rec.data.eval_id = MICROFACET_EVAL;
+					rec.data.sample_id = MICROFACET_SAMPLE;
+					rec.data.pdf_id = MICROFACET_PDF;
+					rec.data.roughness = p->roughness;
+					rec.data.albedo = p->albedo;
+					rec.data.kd = p->kd;
+				}
+				break;
+			case m_type::METAL:
+			 	rec.data.eval_id = METAL_EVAL;
+				rec.data.sample_id = METAL_SAMPLE;
+				rec.data.pdf_id = METAL_PDF;
+				rec.data.albedo = std::dynamic_pointer_cast<Metal>(mesh->material)->albedo;
 				break;
 			default:
 				assert(0);

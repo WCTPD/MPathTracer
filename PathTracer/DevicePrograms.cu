@@ -1,7 +1,10 @@
+#include <cmath>
+#include <cwchar>
 #include <optix_device.h>
 #include <iostream>
 #include <optix.h>
 #include <curand_kernel.h>
+#include <math_functions.h>
 #include "LaunchParams.h"
 
 namespace pt {
@@ -59,7 +62,8 @@ namespace pt {
         const vec3f& B = sbtData.vertex[index.y];
         const vec3f& C = sbtData.vertex[index.z];
         vec3f Ng = normalize(cross(B - A, C - A));
-        const vec3f ray_dir = optixGetWorldRayDirection();
+        vec3f ray_dir = optixGetWorldRayDirection();
+        ray_dir = normalize(ray_dir);
 
 
         vec3f ray_origin = optixGetWorldRayOrigin();
@@ -77,13 +81,14 @@ namespace pt {
             prd->emitted = vec3f(0.f);
         }
 		prd->countEmitted = false;
-        // vec3f wo = optixDirectCall<vec3f, const radiancePRD*, const vec3f&, const TriangleMeshSBTData&>(
-        //     sbtData.sample_id,
-        //     prd,
-        //     N,
-        //     sbtData
-        // );
-        vec3f wo = sampleHemiSphere(-ray_dir, N, state);
+        // vec3f wo = sampleHemiSphere(ray_dir, N, state);
+        auto wo = optixDirectCall<vec3f, const radiancePRD*, const vec3f&, const TriangleMeshSBTData&, const vec3f&>(
+                sbtData.sample_id,
+                prd,
+                N,
+                sbtData,
+                ray_dir
+            ); 
         prd->origin = P;
         prd->direction = normalize(wo);
         // prd->attenuation *= sbtData.albedo;
@@ -99,19 +104,21 @@ namespace pt {
 		float LnDotL          = -dot(light.normal, L_dir);
         vec3f L_light = vec3f(0.f);
 
-        auto pdf = optixDirectCall<float, const radiancePRD*, const vec3f&, const vec3f&, const TriangleMeshSBTData&>(
+        auto pdf = optixDirectCall<float, const radiancePRD*, const vec3f&, const vec3f&, const TriangleMeshSBTData&, const vec3f&>(
                 sbtData.pdf_id,
                 prd,
                 wo,
                 N,
-                sbtData
+                sbtData,
+                ray_dir
             );
-        auto eval = optixDirectCall<vec3f, const radiancePRD*, const vec3f&, const vec3f&, const TriangleMeshSBTData&>(
+        auto eval = optixDirectCall<vec3f, const radiancePRD*, const vec3f&, const vec3f&, const TriangleMeshSBTData&, const vec3f&>(
                 sbtData.eval_id,
                 prd,
                 wo,
                 N,
-                sbtData
+                sbtData,
+                ray_dir
             );
 
         prd->attenuation *= sbtData.albedo;
@@ -237,18 +244,20 @@ namespace pt {
     extern "C" __device__ vec3f __direct_callable__lambertian_sample(
         const radiancePRD* prd,
         const vec3f& surface_noraml,
-        const TriangleMeshSBTData& sbt
+        const TriangleMeshSBTData& sbt,
+        const vec3f& ray_dir
     )
     {
-        auto scattered = sampleHemiSphere(prd->direction, surface_noraml, prd->state);
-        return toWorld(surface_noraml, scattered);
+        auto scattered = sampleHemiSphere(ray_dir, surface_noraml, prd->state);
+        return scattered;//toWorld(surface_noraml, scattered);
     }
 
     extern "C" __device__ float __direct_callable__lambertian_pdf(
         const radiancePRD* prd,
         const vec3f& scattered,
         const vec3f& surface_noraml,
-        const TriangleMeshSBTData& sbt
+        const TriangleMeshSBTData& sbt,
+        const vec3f& ray_dir
     )
     {
         return 0.5f / M_PI;
@@ -258,10 +267,111 @@ namespace pt {
         const radiancePRD* prd,
         const vec3f& scattered,
         const vec3f& surface_noraml,
-        const TriangleMeshSBTData& sbt
+        const TriangleMeshSBTData& sbt,
+        const vec3f& ray_dir
     )
     {
         return sbt.albedo / M_PI;
     }
 
+    extern "C" __device__ vec3f __direct_callable__microfacet_sample(
+        const radiancePRD* prd,
+        const vec3f& surface_noraml,
+        const TriangleMeshSBTData& sbt,
+        const vec3f& ray_dir
+    )
+    {
+        curandState_t* state = prd->state;
+        float a = sbt.roughness;
+        float a1 = a * a;
+        float e0 = getRandomFloat(state), e1 = getRandomFloat(state);
+        float theta = atan2(a * sqrt(e0), sqrt(1.0f - e0));
+        float phi = 2.0f * M_PI * e1;
+
+        auto x = sin(theta) * cos(phi);
+        auto y = cos(theta);
+        auto z = sin(theta) * sin(phi);
+        vec3f wm(x, y, z);
+        wm = normalize(wm);
+        wm = toWorld(surface_noraml, wm);
+        return reflect(ray_dir, wm);
+    }
+
+    extern "C" __device__ vec3f __direct_callable__microfacet_pdf(
+        const radiancePRD* prd,
+        const vec3f& scattered,
+        const vec3f& surface_noraml,
+        const TriangleMeshSBTData& sbt,
+        const vec3f& ray_dir
+    )
+    {
+        vec3f wo = -ray_dir;
+        vec3f N = surface_noraml;
+        if (dot(wo, surface_noraml) < 0.0f)
+            return 0.0f;
+        vec3f wm = normalize(wo + scattered);
+        float D = DistributionGGX(N, wm, sbt.roughness);
+        return (D * dot(wm, N)) / (4.0f * dot(wo, wm));
+    }
+
+    extern "C" __device__ vec3f __direct_callable__microfacet_eval( 
+        const radiancePRD* prd,
+        const vec3f& scattered,
+        const vec3f& surface_noraml,
+        const TriangleMeshSBTData& sbt,
+        const vec3f& ray_dir
+    )
+    {
+        vec3f wi = scattered;
+        vec3f wo = -ray_dir;
+        vec3f N = surface_noraml;
+        float roughness = sbt.roughness;
+        auto wm = normalize(wi + wo);
+        float cosalpha = dot(N, wo);
+        float wmDotwo  = dot(wo, wm);
+        if (cosalpha > 0.0f && wmDotwo > 0.0f) {
+            float F;
+            fresnel(wo, N, 15.f, F);
+            float D = DistributionGGX(N, wm, roughness);
+            float k = (roughness + 1.0f) * (roughness + 1.0f) / 8.0f;
+            float G = GeometrySmith(N, wi, wo, k); //dotProduct(N, wi) / (dotProduct(N, wi) * (1.0f - k) + k);
+            float mirofacet = F * G * D / (4.0 * dot(wo, N) * dot(wi, N));
+            return (mirofacet * (vec3f(1.f) - sbt.kd));// + (sbt.kd * sbt.albedo / M_PI);
+        } else {
+            return vec3f(0.0f);
+        }
+    }
+
+    extern "C" __device__ vec3f __direct_callable__metal_sample(
+        const radiancePRD* prd,
+        const vec3f& surface_noraml,
+        const TriangleMeshSBTData& sbt,
+        const vec3f& ray_dir
+    )
+    {
+        auto scattered = reflect(ray_dir, surface_noraml);
+        return scattered;//toWorld(surface_noraml, scattered);
+    }
+
+    extern "C" __device__ float __direct_callable__metal_pdf(
+        const radiancePRD* prd,
+        const vec3f& scattered,
+        const vec3f& surface_noraml,
+        const TriangleMeshSBTData& sbt,
+        const vec3f& ray_dir
+    )
+    {
+        return 1.0f;
+    }
+
+    extern "C" __device__ vec3f __direct_callable__metal_eval(
+        const radiancePRD* prd,
+        const vec3f& scattered,
+        const vec3f& surface_noraml,
+        const TriangleMeshSBTData& sbt,
+        const vec3f& ray_dir
+    )
+    {
+        return 1.0f;
+    }
 }

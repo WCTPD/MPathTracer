@@ -2,6 +2,7 @@
 #include "Renderer.h"
 #include "glfWindow/GLFWindow.h"
 #include <GL/gl.h>
+#include <memory>
 
 namespace pt {
 
@@ -95,13 +96,16 @@ namespace pt {
         auto red   = std::make_shared<Lambertian>(vec3f(.65f, .05f, .05f));
         auto green = std::make_shared<Lambertian>(vec3f(.12f, .45f, .15f));
         auto light = std::make_shared<Diffuse_light>(vec3f(15.f, 15.f, 15.f));
+        auto microfacet = std::make_shared<Microfacet>(0.01, vec3f(0.8f, 0.8f, 0.8f), vec3f(0.1f, 0.1f, 0.1f));
+        auto metal = std::make_shared<Metal>(vec3f(0.99f), 0.f);
         Model scene;
         scene.Add(loadOBJ("../../models/cornellbox/floor.obj", white));
         scene.Add(loadOBJ("../../models/cornellbox/left.obj", red));
         scene.Add(loadOBJ("../../models/cornellbox/right.obj", green));
         scene.Add(loadOBJ("../../models/cornellbox/shortbox.obj", white));
-        scene.Add(loadOBJ("../../models/cornellbox/tallbox.obj", white));
+        scene.Add(loadOBJ("../../models/cornellbox/tallbox.obj", microfacet));
         scene.Add(loadOBJ("../../models/cornellbox/light.obj", light));
+        scene.Add(loadOBJ("../../models/bunny/untitled.obj", white));
 		Camera camera{
 			vec3f(278, 278, -600), // pos
 			vec3f(278, 278, 0), // at
