@@ -103,7 +103,7 @@ namespace pt {
         scene.Add(loadOBJ("../../models/cornellbox/left.obj", red));
         scene.Add(loadOBJ("../../models/cornellbox/right.obj", green));
         scene.Add(loadOBJ("../../models/cornellbox/shortbox.obj", white));
-        scene.Add(loadOBJ("../../models/cornellbox/tallbox.obj", microfacet));
+        scene.Add(loadOBJ("../../models/cornellbox/tallbox.obj", metal));
         scene.Add(loadOBJ("../../models/cornellbox/light.obj", light));
         scene.Add(loadOBJ("../../models/bunny/untitled.obj", white));
 		Camera camera{
