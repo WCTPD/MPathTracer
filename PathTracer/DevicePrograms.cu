@@ -282,10 +282,10 @@ namespace pt {
     )
     {
         curandState_t* state = prd->state;
-        float a = sbt.roughness;
-        float a1 = a * a;
+        float a = sbt.roughness * sbt.roughness;
+        float a2 = a * a;
         float e0 = getRandomFloat(state), e1 = getRandomFloat(state);
-        float theta = atan2(a * sqrt(e0), sqrt(1.0f - e0));
+        float theta = acos(sqrt((1.0f - e0) / ((a2 - 1.0f) * e0 + 1.0f))); //atan2(a * sqrt(e0), sqrt(1.0f - e0));
         float phi = 2.0f * M_PI * e1;
 
         auto x = sin(theta) * cos(phi);
@@ -294,7 +294,7 @@ namespace pt {
         vec3f wm(x, y, z);
         wm = normalize(wm);
         wm = toWorld(surface_noraml, wm);
-        return reflect(ray_dir, wm);
+        return reflect(-ray_dir, wm);
     }
 
     extern "C" __device__ vec3f __direct_callable__microfacet_pdf(
@@ -322,8 +322,8 @@ namespace pt {
         const vec3f& ray_dir
     )
     {
-        vec3f wi = scattered;
-        vec3f wo = -ray_dir;
+        vec3f wo = scattered;
+        vec3f wi = -ray_dir;
         vec3f N = surface_noraml;
         float roughness = sbt.roughness;
         auto wm = normalize(wi + wo);
@@ -331,12 +331,12 @@ namespace pt {
         float wmDotwo  = dot(wo, wm);
         if (cosalpha > 0.0f && wmDotwo > 0.0f) {
             float F;
-            fresnel(wo, N, 15.f, F);
+            fresnel(-wi, N, 1.5f, F);
             float D = DistributionGGX(N, wm, roughness);
             float k = (roughness + 1.0f) * (roughness + 1.0f) / 8.0f;
             float G = GeometrySmith(N, wi, wo, k); //dotProduct(N, wi) / (dotProduct(N, wi) * (1.0f - k) + k);
             float mirofacet = F * G * D / (4.0 * dot(wo, N) * dot(wi, N));
-            return (mirofacet * (vec3f(1.f) - sbt.kd));// + (sbt.kd * sbt.albedo / M_PI);
+            return (mirofacet * (vec3f(1.f) - sbt.kd)) + (sbt.kd * sbt.albedo / M_PI);
         } else {
             return vec3f(0.0f);
         }

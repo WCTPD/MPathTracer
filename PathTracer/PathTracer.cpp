@@ -96,7 +96,7 @@ namespace pt {
         auto red   = std::make_shared<Lambertian>(vec3f(.65f, .05f, .05f));
         auto green = std::make_shared<Lambertian>(vec3f(.12f, .45f, .15f));
         auto light = std::make_shared<Diffuse_light>(vec3f(15.f, 15.f, 15.f));
-        auto microfacet = std::make_shared<Microfacet>(0.01, vec3f(0.8f, 0.8f, 0.8f), vec3f(0.1f, 0.1f, 0.1f));
+        auto microfacet = std::make_shared<Microfacet>(0.25, vec3f(0.8f, 0.7f, 0.8f), vec3f(0.5f, 0.5f, 0.5f));
         auto metal = std::make_shared<Metal>(vec3f(0.99f), 0.f);
         Model scene;
         scene.Add(loadOBJ("../../models/cornellbox/floor.obj", white));
